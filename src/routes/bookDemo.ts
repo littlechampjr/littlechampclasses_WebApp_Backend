@@ -27,6 +27,8 @@ const sendOtpSchema = z.object({
 const verifyOtpSchema = z.object({
   phone: z.string().min(8).max(20),
   code: z.string().min(4).max(8),
+  /** From send-otp; required when OTP meta has no enrollmentId (e.g. dev bypass). */
+  enrollmentId: z.string().trim().min(1).optional(),
 });
 
 const verifyPaymentSchema = z.object({
@@ -144,8 +146,15 @@ bookDemoRouter.post(
       return;
     }
 
-    const enrollmentIdRaw = verified.meta.enrollmentId;
-    if (typeof enrollmentIdRaw !== "string" || !mongoose.isValidObjectId(enrollmentIdRaw)) {
+    const metaId = verified.meta.enrollmentId;
+    const bodyId = parsed.data.enrollmentId?.trim();
+    let enrollmentIdRaw: string | undefined;
+    if (typeof metaId === "string" && mongoose.isValidObjectId(metaId)) {
+      enrollmentIdRaw = metaId;
+    } else if (bodyId && mongoose.isValidObjectId(bodyId)) {
+      enrollmentIdRaw = bodyId;
+    }
+    if (!enrollmentIdRaw) {
       res.status(400).json({ error: "Invalid enrollment context." });
       return;
     }
