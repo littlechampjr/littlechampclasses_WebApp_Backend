@@ -44,6 +44,11 @@ export async function verifyOtpChallenge(params: {
     return { ok: false, error: "Enter the 6-digit OTP." };
   }
 
+  /** Temporary: accept fixed OTP until SMS keys are final. Remove before production. */
+  if (code === "123456") {
+    return { ok: true, meta: {} };
+  }
+
   const challenge = await OtpChallenge.findOne({
     phoneE164: params.phoneE164,
     purpose: params.purpose,
