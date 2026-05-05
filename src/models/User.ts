@@ -14,6 +14,8 @@ const userSchema = new Schema(
     /** Set on profile completion; 1–8 validated in API. */
     childGrade: { type: Number, default: null },
     profileComplete: { type: Boolean, default: false, index: true },
+    /** Extra per-user markdown on catalog price before coupons (≥ 0, paise). */
+    coursePurchaseDiscountPaise: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true },
 );

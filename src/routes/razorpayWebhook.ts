@@ -1,5 +1,7 @@
 import type { RequestHandler } from "express";
 import { BookDemoEnrollment } from "../models/BookDemoEnrollment.js";
+import { CoursePurchase } from "../models/CoursePurchase.js";
+import { Enrollment } from "../models/Enrollment.js";
 import { verifyWebhookSignature } from "../services/razorpayService.js";
 
 type RazorpayWebhookBody = {
@@ -50,6 +52,27 @@ export const razorpayWebhookHandler: RequestHandler = async (req, res) => {
       enrollment.paymentRef = paymentId;
       enrollment.status = "paid";
       await enrollment.save();
+    }
+
+    const purchase = await CoursePurchase.findOne({ razorpayOrderId: orderId });
+    if (purchase && purchase.status !== "paid") {
+      purchase.razorpayPaymentId = paymentId;
+      purchase.status = "paid";
+      await purchase.save();
+      await Enrollment.updateOne(
+        { user: purchase.user, batch: purchase.batch },
+        {
+          $setOnInsert: {
+            user: purchase.user,
+            batch: purchase.batch,
+            status: "active",
+            source: "program",
+            purchasedAt: new Date(),
+            bookDemoEnrollment: null,
+          },
+        },
+        { upsert: true },
+      );
     }
   }
 
