@@ -13,6 +13,7 @@
     "start": "npm run build && node dist/index.js",
     "start:prod": "node dist/index.js",
     "seed": "tsx src/scripts/seed.ts",
+    "seed:premium": "tsx src/scripts/runPremiumMasterPurchaseSeed.ts",
     "seed:tests": "tsx src/scripts/seedTests.ts",
     "backfill:enrollments": "tsx src/scripts/backfillEnrollmentsFromBookDemo.ts"
   },

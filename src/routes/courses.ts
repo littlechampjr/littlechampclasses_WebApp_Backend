@@ -2,8 +2,18 @@ import type { Types } from "mongoose";
 import { Router } from "express";
 import { Course } from "../models/Course.js";
 import { CourseBatch } from "../models/CourseBatch.js";
+import { requireAuth } from "../middleware/auth.js";
+import { mapPurchaseFlowPublicDto } from "../util/mapPurchaseFlowDto.js";
 import { asyncHandler } from "../util/asyncHandler.js";
 import { buildBookDemoHeading, formatBatchDateRange } from "../util/bookDemoHeading.js";
+import { programTitleFromCourse, type CourseLean } from "./coursesShared.js";
+import {
+  getCourseCouponCatalog,
+  getCoursePurchasePricing,
+  postCreateCoursePurchaseOrder,
+  postValidateCourseCoupon,
+  postVerifyCoursePurchasePayment,
+} from "./coursePurchaseHandlers.js";
 
 export const coursesRouter = Router();
 
@@ -13,27 +23,6 @@ const HOME_FEATURED_SLUGS = [
   "learn-english-demo",
   "learn-maths-demo",
 ] as const;
-
-type CourseLean = {
-  _id: { toString: () => string };
-  title: string;
-  slug: string;
-  description: string;
-  detailDescription?: string;
-  track: string;
-  pricePaise: number;
-  compareAtPricePaise?: number | null;
-  liveSessionsFirst?: number;
-  liveSessionsSecond?: number;
-  isDemo: boolean;
-  previewVideoUrl?: string;
-  thumbnailUrl?: string;
-  marketingTitle?: string;
-  marketingBullets?: string[];
-  classStartsAt?: Date | null;
-  isActive: boolean;
-  bookDemoEnabled?: boolean;
-};
 
 type BatchLean = {
   _id: Types.ObjectId;
@@ -51,13 +40,6 @@ export type CourseBatchDto = {
   /** Heading with grade defaulting to 1 (first class band). */
   bookingHeadingDefault: string;
 };
-
-function programTitleFromCourse(c: CourseLean): string {
-  return (
-    c.marketingTitle?.trim() ||
-    c.title.replace(/\s*\(demo\)\s*$/i, "").trim()
-  );
-}
 
 function mapBatchesForCourse(programTitle: string, batches: BatchLean[]): CourseBatchDto[] {
   return batches.map((b) => {
@@ -124,6 +106,7 @@ function mapCourse(c: CourseLean, batches: CourseBatchDto[]) {
     c.title.replace(/\s*\(demo\)\s*$/i, "").trim();
 
   const compareAt = c.compareAtPricePaise ?? null;
+  const purchaseFlow = mapPurchaseFlowPublicDto(c, batches);
 
   return {
     id: c._id.toString(),
@@ -148,6 +131,7 @@ function mapCourse(c: CourseLean, batches: CourseBatchDto[]) {
     isActive: c.isActive,
     bookDemoEnabled: c.bookDemoEnabled === true,
     batches,
+    purchaseFlow,
   };
 }
 
@@ -159,6 +143,30 @@ coursesRouter.get(
     req.query.featured === "1" ||
     req.query.featured === "true" ||
     req.query.home === "1";
+
+  const wantPurchaseFlow =
+    req.query.purchaseFlow === "1" || req.query.purchaseFlow === "true";
+
+  if (wantPurchaseFlow) {
+    const found = await Course.find({
+      isActive: true,
+      "purchaseFlow.enabled": true,
+    })
+      .sort({ updatedAt: -1 })
+      .lean();
+    const ids = found.map((c) => c._id as Types.ObjectId);
+    const batchMap = await loadBatchesGrouped(ids);
+    res.json({
+      courses: found.map((c) => {
+        const cl = c as CourseLean;
+        const programTitle = programTitleFromCourse(cl);
+        const raw = batchMap.get(c._id.toString()) ?? [];
+        const batches = mapBatchesForCourse(programTitle, raw);
+        return mapCourse(cl, batches);
+      }),
+    });
+    return;
+  }
 
   if (wantFeatured) {
     const found = await Course.find({
@@ -183,6 +191,36 @@ coursesRouter.get(
   const list = await Course.find({ isActive: true }).sort({ track: 1, title: 1 }).lean();
   res.json({ courses: list.map((c) => mapCourse(c as CourseLean, [])) });
   }),
+);
+
+coursesRouter.get(
+  "/:slug/purchase/pricing",
+  requireAuth,
+  asyncHandler(getCoursePurchasePricing),
+);
+
+coursesRouter.post(
+  "/:slug/purchase/validate-coupon",
+  requireAuth,
+  asyncHandler(postValidateCourseCoupon),
+);
+
+coursesRouter.get(
+  "/:slug/purchase/coupons",
+  requireAuth,
+  asyncHandler(getCourseCouponCatalog),
+);
+
+coursesRouter.post(
+  "/:slug/purchase/orders",
+  requireAuth,
+  asyncHandler(postCreateCoursePurchaseOrder),
+);
+
+coursesRouter.post(
+  "/:slug/purchase/verify-payment",
+  requireAuth,
+  asyncHandler(postVerifyCoursePurchasePayment),
 );
 
 coursesRouter.get(

@@ -14,6 +14,7 @@ import {
   ymdInTz,
 } from "../util/scheduleTime.js";
 import { buildDetailDescription } from "./seedData.js";
+import { upsertPremiumMasterCourse } from "./premiumMasterPurchaseSeed.js";
 
 const T = {
   stories: "/courses/thumb-stories.svg",
@@ -340,6 +341,8 @@ async function run() {
       );
     }
   }
+
+  await upsertPremiumMasterCourse();
 
   await seedDashboardQaData();
 
