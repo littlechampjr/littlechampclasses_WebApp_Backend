@@ -2,6 +2,7 @@ import "dotenv/config";
 import { addDays } from "date-fns";
 import { fromZonedTime } from "date-fns-tz";
 import mongoose from "mongoose";
+import "../registerModels.js";
 import { env } from "../env.js";
 import { ClassSession } from "../models/ClassSession.js";
 import { Course } from "../models/Course.js";

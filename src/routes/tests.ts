@@ -70,14 +70,21 @@ function applySubmitResult(
 
 export const testsRouter = Router();
 
-/** Public list: active tests only. */
+/** Public list: active tests only. Optional `?courseId=` restricts to tests linked to that course. */
 testsRouter.get(
   "/",
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
     const now = new Date();
+    const courseIdRaw =
+      typeof req.query.courseId === "string" && req.query.courseId.trim()
+        ? req.query.courseId.trim()
+        : null;
+    const courseFilter =
+      courseIdRaw && isOid(courseIdRaw) ? { courseIds: new Types.ObjectId(courseIdRaw) } : null;
     const rows = await Test.find({
       isActive: true,
       $or: [{ startAt: null }, { startAt: { $lte: now } }],
+      ...(courseFilter ?? {}),
     })
       .select(
         "title durationMins totalMarks attemptsCount startAt recommended questions",

@@ -41,7 +41,7 @@ export type CourseBatchDto = {
   bookingHeadingDefault: string;
 };
 
-function mapBatchesForCourse(programTitle: string, batches: BatchLean[]): CourseBatchDto[] {
+export function mapBatchesForCourse(programTitle: string, batches: BatchLean[]): CourseBatchDto[] {
   return batches.map((b) => {
     const startsAt = new Date(b.startsAt);
     const endsAt = new Date(b.endsAt);
@@ -56,7 +56,7 @@ function mapBatchesForCourse(programTitle: string, batches: BatchLean[]): Course
   });
 }
 
-async function loadBatchesGrouped(
+export async function loadBatchesGrouped(
   courseIds: Types.ObjectId[],
 ): Promise<Map<string, BatchLean[]>> {
   if (courseIds.length === 0) {
@@ -87,7 +87,7 @@ async function loadBatchesGrouped(
   return map;
 }
 
-function mapCourse(c: CourseLean, batches: CourseBatchDto[]) {
+export function mapCourse(c: CourseLean, batches: CourseBatchDto[]) {
   const first = c.liveSessionsFirst ?? 6;
   const second = c.liveSessionsSecond ?? 6;
   const bullets =

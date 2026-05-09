@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import "./registerModels.js";
 import { env } from "./env.js";
 import { ensurePhoneOnlyUserIndexes } from "./migrations/legacyUserIndexes.js";
 
