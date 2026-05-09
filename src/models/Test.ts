@@ -34,6 +34,11 @@ const testSectionSchema = new Schema(
 
 const testSchema = new Schema(
   {
+    /** When non-empty, test appears in program Homework for these courses only. */
+    courseIds: {
+      type: [{ type: Schema.Types.ObjectId, ref: "Course", index: true }],
+      default: [],
+    },
     slug: { type: String, required: true, unique: true, index: true, trim: true, maxlength: 160 },
     title: { type: String, required: true, trim: true, maxlength: 200 },
     isActive: { type: Boolean, default: true, index: true },

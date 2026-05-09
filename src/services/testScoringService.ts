@@ -73,6 +73,11 @@ export function scoreAttempt(
   const byId = buildQuestionMap(test);
   const answerByQ = new Map(answers.map((a) => [a.questionId, a]));
 
+  /** Upper bound for any stored duration (matches Test.durationMins max 600 + grace). Clamps bad client ms/clock values. */
+  const maxAttemptSec = Math.min(86_400, test.durationMins * 60 + 300);
+  const clampDur = (n: number) =>
+    Math.max(0, Math.min(Math.floor(Number.isFinite(n) ? n : 0), maxAttemptSec));
+
   let totalScore = 0;
   let maxScore = 0;
   let correct = 0;
@@ -100,7 +105,7 @@ export function scoreAttempt(
 
   for (const q of test.questions) {
     const sub = answerByQ.get(q.publicId);
-    const t = sub?.timeSpentSec ?? 0;
+    const t = clampDur(sub?.timeSpentSec ?? 0);
     timeTakenSec += t;
 
     const rowBase = {
@@ -161,13 +166,16 @@ export function scoreAttempt(
     ? round2((answered / test.questions.length) * 100)
     : 0;
 
-  const wallSec = Math.max(0, Math.floor((+submittedAt - +startedAt) / 1000));
+  const wallSecRaw = Math.max(0, Math.floor((+submittedAt - +startedAt) / 1000));
+  const wallSec = Math.min(wallSecRaw, maxAttemptSec);
+  timeTakenSec = Math.min(timeTakenSec, maxAttemptSec);
   // Prefer sum of per-question focus time if meaningful; else wall clock
   if (timeTakenSec <= 0) {
     timeTakenSec = wallSec;
   } else {
     timeTakenSec = Math.min(wallSec, timeTakenSec);
   }
+  timeTakenSec = clampDur(timeTakenSec);
 
   const sectionRows: SectionRow[] = [];
   for (const [sid, smax] of sectionMax) {
@@ -179,7 +187,7 @@ export function scoreAttempt(
     let st = 0;
     for (const pq of perQuestion) {
       const meta = byId.get(pq.questionId);
-      if (meta?.sectionId === sid) st += pq.timeSpentSec;
+      if (meta?.sectionId === sid) st += clampDur(pq.timeSpentSec);
     }
     sectionRows.push({
       sectionId: sid,
@@ -190,7 +198,7 @@ export function scoreAttempt(
       incorrect: inc,
       skipped: sk,
       accuracyPct: sAcc,
-      timeTakenSec: st,
+      timeTakenSec: clampDur(st),
     });
   }
   sectionRows.sort((a, b) => a.sectionId.localeCompare(b.sectionId));
@@ -203,9 +211,12 @@ export function scoreAttempt(
     skipped,
     accuracyPct,
     completionPct,
-    timeTakenSec: Math.max(0, Math.floor(timeTakenSec)),
+    timeTakenSec: clampDur(timeTakenSec),
     sectionRows,
-    perQuestion,
+    perQuestion: perQuestion.map((pq) => ({
+      ...pq,
+      timeSpentSec: clampDur(pq.timeSpentSec),
+    })),
   };
 }
 

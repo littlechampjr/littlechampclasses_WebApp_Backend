@@ -3,7 +3,11 @@ import { Router } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
 import { ClassSession } from "../models/ClassSession.js";
+import { Course } from "../models/Course.js";
+import { CourseStudyOutline } from "../models/CourseStudyOutline.js";
+import { CourseTeacher } from "../models/CourseTeacher.js";
 import { Enrollment } from "../models/Enrollment.js";
+import { ProgramFaq } from "../models/ProgramFaq.js";
 import { env } from "../env.js";
 import { requireAuth } from "../middleware/auth.js";
 import { asyncHandler } from "../util/asyncHandler.js";
@@ -19,10 +23,15 @@ import {
   zonedDayStartUtc,
   weekdayShortInTz,
 } from "../util/scheduleTime.js";
+import { loadBatchesGrouped, mapBatchesForCourse, mapCourse } from "./courses.js";
+import {
+  programTitleFromCourse,
+  type CourseLean as SharedCourseLean,
+} from "./coursesShared.js";
 
 export const learnerMeRouter = Router();
 
-type CourseLean = {
+type CourseLeanMini = {
   _id: mongoose.Types.ObjectId;
   title: string;
   marketingTitle?: string;
@@ -33,7 +42,7 @@ type BatchLean = {
   code: string;
   startsAt: Date;
   endsAt: Date;
-  course?: CourseLean;
+  course?: CourseLeanMini;
 };
 
 type EnrollmentLean = {
@@ -41,13 +50,6 @@ type EnrollmentLean = {
   purchasedAt: Date;
   batch: BatchLean;
 };
-
-function programTitleFromCourse(course: CourseLean | undefined): string {
-  if (!course) return "Program";
-  const t = (course.marketingTitle ?? "").trim();
-  if (t) return t;
-  return String(course.title ?? "").replace(/\s*\(demo\)\s*$/i, "").trim() || "Program";
-}
 
 function mapSessionDto(s: {
   _id: mongoose.Types.ObjectId;
@@ -103,6 +105,129 @@ function pickDefaultBatchId(enrollments: EnrollmentLean[], tz: string): string |
   });
   return pool[0]?.e.batch._id.toString() ?? null;
 }
+
+learnerMeRouter.get(
+  "/enrollments/:enrollmentId/program",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const { enrollmentId } = req.params;
+    if (!mongoose.isValidObjectId(enrollmentId)) {
+      res.status(400).json({ error: "Invalid enrollment id" });
+      return;
+    }
+
+    const row = await Enrollment.findOne({
+      _id: enrollmentId,
+      user: req.userId,
+      status: "active",
+    })
+      .populate({
+        path: "batch",
+        populate: { path: "course" },
+      })
+      .lean();
+
+    if (!row || !row.batch || typeof row.batch !== "object") {
+      res.status(404).json({ error: "Enrollment not found" });
+      return;
+    }
+
+    const batch = row.batch as unknown as {
+      _id: mongoose.Types.ObjectId;
+      code: string;
+      startsAt: Date;
+      endsAt: Date;
+      course?: CourseLeanMini & { _id?: mongoose.Types.ObjectId };
+    };
+
+    if (!batch.code || !batch._id) {
+      res.status(404).json({ error: "Enrollment not found" });
+      return;
+    }
+
+    const courseMini = batch.course;
+    if (!courseMini?._id) {
+      res.status(404).json({ error: "Course not found" });
+      return;
+    }
+
+    const courseOid = courseMini._id;
+    const c = await Course.findById(courseOid).lean();
+    if (!c?.isActive) {
+      res.status(404).json({ error: "Course not found" });
+      return;
+    }
+
+    const cl = c as unknown as SharedCourseLean;
+    const batchMap = await loadBatchesGrouped([courseOid]);
+    const programTitle = programTitleFromCourse(cl);
+    const rawBatches = batchMap.get(courseOid.toString()) ?? [];
+    const batchesDto = mapBatchesForCourse(programTitle, rawBatches);
+    const courseDto = mapCourse(cl, batchesDto);
+
+    const [assignments, faqs, outline] = await Promise.all([
+      CourseTeacher.find({ course: courseOid }).populate("teacher").sort({ sortOrder: 1 }).lean(),
+      ProgramFaq.find({ courseIds: courseOid, isActive: true }).sort({ sortOrder: 1 }).lean(),
+      CourseStudyOutline.findOne({ course: courseOid }).lean(),
+    ]);
+
+    const teachers = assignments
+      .map((a) => {
+        const t = a.teacher as
+          | { _id: mongoose.Types.ObjectId; name?: string; imageUrl?: string; bioLine?: string }
+          | null
+          | undefined;
+        if (!t?._id) return null;
+        return {
+          id: t._id.toString(),
+          name: String(t.name ?? "").trim() || "Mentor",
+          imageUrl: String(t.imageUrl ?? "").trim(),
+          subjectLabel: String(a.subjectLabel ?? "").trim() || "Subject",
+          bioLine: String(t.bioLine ?? "").trim(),
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x != null);
+
+    const faqDtos = faqs.map((f) => ({
+      id: f._id.toString(),
+      question: f.question,
+      answer: f.answer,
+    }));
+
+    const studySubjects =
+      outline?.subjects?.map((s) => ({
+        key: s.key,
+        label: s.label,
+        sortOrder: s.sortOrder ?? 0,
+        chapters: (s.chapters ?? []).map((ch) => ({
+          title: ch.title,
+          videoCount: ch.videoCount ?? 0,
+          exerciseCount: ch.exerciseCount ?? 0,
+          noteCount: ch.noteCount ?? 0,
+          sortOrder: ch.sortOrder ?? 0,
+        })),
+      })) ?? [];
+
+    const startsAt = new Date(batch.startsAt);
+    const endsAt = new Date(batch.endsAt);
+
+    res.json({
+      isEnrolled: true,
+      enrollment: {
+        enrollmentId: row._id.toString(),
+        batchId: batch._id.toString(),
+        courseId: courseOid.toString(),
+        batchCode: batch.code,
+        purchasedAt: new Date(row.purchasedAt).toISOString(),
+        batchDateRangeLabel: formatBatchDateRange(startsAt, endsAt),
+      },
+      course: courseDto,
+      teachers,
+      faqs: faqDtos,
+      studyRoom: { subjects: studySubjects },
+    });
+  }),
+);
 
 learnerMeRouter.get(
   "/dashboard",
@@ -194,7 +319,7 @@ learnerMeRouter.get(
         enrollmentId: e._id.toString(),
         batchId: b._id.toString(),
         courseId: c?._id.toString() ?? "",
-        courseTitle: programTitleFromCourse(c),
+        courseTitle: programTitleFromCourse(c as Pick<SharedCourseLean, "title" | "marketingTitle">),
         batchCode: b.code,
         dateRangeLabel: formatBatchDateRange(startsAt, endsAt),
         startsAt: startsAt.toISOString(),

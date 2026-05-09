@@ -6,6 +6,7 @@
 import "dotenv/config";
 import mongoose from "mongoose";
 import { env } from "../env.js";
+import "../registerModels.js";
 import { MASTER_PROGRAM_SLUG, upsertPremiumMasterCourse } from "./premiumMasterPurchaseSeed.js";
 
 async function main() {
