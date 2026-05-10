@@ -86,7 +86,7 @@ authRouter.post(
       purpose: "login",
       sms,
       messageBody: (code) =>
-        `Little Champ Junior: ${code} is your login OTP. Valid for a few minutes. Do not share it.`,
+        `Your OTP Code is ${code}. Do not share it with anyone. From ConnectingHeart . #TeamDigiCoders`,
     });
     res.json({
       ok: true,

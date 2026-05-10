@@ -66,7 +66,7 @@ interestRouter.post(
       meta: { courseSlug: slug, courseId: course._id.toString() },
       sms,
       messageBody: (code) =>
-        `Little Champ Junior: ${code} is your OTP to join the waitlist. Valid a few minutes. Do not share it.`,
+        `Your OTP Code is ${code}. Do not share it with anyone. From ConnectingHeart . #TeamDigiCoders`,
     });
 
     res.json({
