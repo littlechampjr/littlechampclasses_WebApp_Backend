@@ -4,14 +4,15 @@ import { z } from "zod";
 import { BookDemoEnrollment } from "../models/BookDemoEnrollment.js";
 import { Course } from "../models/Course.js";
 import { CourseBatch } from "../models/CourseBatch.js";
-import { Enrollment } from "../models/Enrollment.js";
-import { User } from "../models/User.js";
 import { requireBookDemoToken } from "../middleware/bookDemoAuth.js";
 import { createOtpChallenge, verifyOtpChallenge } from "../services/otpChallengeService.js";
 import { getRazorpay, verifyPaymentSignature } from "../services/razorpayService.js";
 import { getSmsSender } from "../services/sms/getSmsSender.js";
+import { publicUserResponse } from "./auth.js";
 import { asyncHandler } from "../util/asyncHandler.js";
+import { signUserAuthJwt } from "../util/authJwt.js";
 import { signBookDemoToken } from "../util/bookDemoToken.js";
+import { linkPaidBookDemoToUserEnrollment } from "../util/linkBookDemoEnrollment.js";
 import { normalizeIndianMobile } from "../util/phone.js";
 import { env } from "../env.js";
 
@@ -261,25 +262,20 @@ bookDemoRouter.post(
     enrollment.status = "paid";
     await enrollment.save();
 
-    // Auto-create canonical Enrollment so the dashboard shows immediately
-    const user = await User.findOne({ phoneE164: enrollment.phoneE164 }).lean();
-    if (user && enrollment.batch) {
-      await Enrollment.updateOne(
-        { user: user._id, batch: enrollment.batch },
-        {
-          $setOnInsert: {
-            user: user._id,
-            batch: enrollment.batch,
-            status: "active",
-            source: "book_demo",
-            purchasedAt: new Date(),
-            bookDemoEnrollment: enrollment._id,
-          },
-        },
-        { upsert: true },
-      );
-    }
+    const { user } = await linkPaidBookDemoToUserEnrollment(
+      enrollment.phoneE164,
+      enrollment.batch,
+      enrollment._id,
+    );
 
-    res.json({ ok: true, enrollmentId: enrollment._id.toString() });
+    const token = signUserAuthJwt(user._id.toString(), user.phoneE164);
+
+    res.json({
+      ok: true,
+      enrollmentId: enrollment._id.toString(),
+      token,
+      user: publicUserResponse(user),
+      needsOnboarding: !user.profileComplete,
+    });
   }),
 );

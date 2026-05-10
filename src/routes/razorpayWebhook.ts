@@ -3,6 +3,7 @@ import { BookDemoEnrollment } from "../models/BookDemoEnrollment.js";
 import { CoursePurchase } from "../models/CoursePurchase.js";
 import { Enrollment } from "../models/Enrollment.js";
 import { verifyWebhookSignature } from "../services/razorpayService.js";
+import { linkPaidBookDemoToUserEnrollment } from "../util/linkBookDemoEnrollment.js";
 
 type RazorpayWebhookBody = {
   event?: string;
@@ -52,6 +53,11 @@ export const razorpayWebhookHandler: RequestHandler = async (req, res) => {
       enrollment.paymentRef = paymentId;
       enrollment.status = "paid";
       await enrollment.save();
+      await linkPaidBookDemoToUserEnrollment(
+        enrollment.phoneE164,
+        enrollment.batch,
+        enrollment._id,
+      );
     }
 
     const purchase = await CoursePurchase.findOne({ razorpayOrderId: orderId });

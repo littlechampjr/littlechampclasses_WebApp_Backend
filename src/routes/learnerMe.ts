@@ -8,6 +8,7 @@ import { CourseStudyOutline } from "../models/CourseStudyOutline.js";
 import { CourseTeacher } from "../models/CourseTeacher.js";
 import { Enrollment } from "../models/Enrollment.js";
 import { ProgramFaq } from "../models/ProgramFaq.js";
+import { Teacher } from "../models/Teacher.js";
 import { env } from "../env.js";
 import { requireAuth } from "../middleware/auth.js";
 import { asyncHandler } from "../util/asyncHandler.js";
@@ -61,12 +62,14 @@ function mapSessionDto(s: {
   teacherImageUrl?: string;
   statusMicrocopy?: string;
   hasAttachments?: boolean;
+  meetUrl?: string;
 }) {
   const tz = env.scheduleTz;
   const ymdToday = todayYmd(tz);
   const ymdSession = ymdInTz(s.startsAt, tz);
   const ymdTomorrow = ymdInTz(addDays(zonedDayStartUtc(ymdToday, tz), 1), tz);
   const isTomorrow = ymdSession === ymdTomorrow;
+  const meetUrl = typeof s.meetUrl === "string" ? s.meetUrl.trim() : "";
   return {
     id: s._id.toString(),
     title: s.title,
@@ -79,6 +82,7 @@ function mapSessionDto(s: {
     teacherImageUrl: s.teacherImageUrl ?? "",
     statusMicrocopy: s.statusMicrocopy ?? "",
     hasAttachments: Boolean(s.hasAttachments),
+    meetUrl,
     scheduleDateYmd: ymdSession,
     dayLabel: `${dayMonthLabelInTz(s.startsAt, tz)} · ${weekdayShortInTz(s.startsAt, tz)}`,
     isTomorrow,
@@ -105,6 +109,239 @@ function pickDefaultBatchId(enrollments: EnrollmentLean[], tz: string): string |
   });
   return pool[0]?.e.batch._id.toString() ?? null;
 }
+
+type StudyOutlineChapterLean = {
+  _id?: mongoose.Types.ObjectId;
+  title: string;
+  videoCount?: number;
+  exerciseCount?: number;
+  noteCount?: number;
+  sortOrder?: number;
+  lectures?: Array<{
+    _id: mongoose.Types.ObjectId;
+    title: string;
+    durationSec: number;
+    videoUrl: string;
+    teacher?: mongoose.Types.ObjectId;
+    sortOrder?: number;
+  }>;
+  classNotes?: Array<{
+    _id: mongoose.Types.ObjectId;
+    title: string;
+    publishedAt?: Date | null;
+    pdfUrl: string;
+    viewerMode?: string;
+    sortOrder?: number;
+  }>;
+  chapterPdfs?: StudyOutlineChapterLean["classNotes"];
+  dhaSolutions?: StudyOutlineChapterLean["classNotes"];
+};
+
+type StudyOutlineSubjectLean = {
+  key: string;
+  label: string;
+  sortOrder?: number;
+  chapters?: StudyOutlineChapterLean[];
+};
+
+function sortOutlineChapters(chapters: StudyOutlineChapterLean[]): StudyOutlineChapterLean[] {
+  return [...chapters].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+}
+
+/** Legacy chapters may omit subdoc _id; URL uses "{subjectKey}~{index}" (index = sorted chapter order). */
+function parseChapterSlotId(chapterId: string): { subjectKey: string; index: number } | null {
+  const lastTilde = chapterId.lastIndexOf("~");
+  if (lastTilde <= 0) return null;
+  const subjectKey = chapterId.slice(0, lastTilde);
+  const idxStr = chapterId.slice(lastTilde + 1);
+  const index = parseInt(idxStr, 10);
+  if (!Number.isInteger(index) || index < 0 || !subjectKey.length) return null;
+  return { subjectKey, index };
+}
+
+function findChapterContext(
+  outline: { subjects?: StudyOutlineSubjectLean[] } | null | undefined,
+  chapterId: string,
+):
+  | { subjectKey: string; subjectLabel: string; chapter: StudyOutlineChapterLean }
+  | null {
+  if (!outline?.subjects?.length) return null;
+  for (const sub of outline.subjects) {
+    for (const ch of sub.chapters ?? []) {
+      if (ch._id?.toString() === chapterId) {
+        return { subjectKey: sub.key, subjectLabel: sub.label, chapter: ch };
+      }
+    }
+  }
+  const slot = parseChapterSlotId(chapterId);
+  if (slot) {
+    const sub = outline.subjects.find((s) => s.key === slot.subjectKey);
+    if (sub) {
+      const sorted = sortOutlineChapters(sub.chapters ?? []);
+      const ch = sorted[slot.index];
+      if (ch) return { subjectKey: sub.key, subjectLabel: sub.label, chapter: ch };
+    }
+  }
+  return null;
+}
+
+function sortByResourceOrder<T extends { sortOrder?: number }>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+}
+
+function mapOutlinePdfRow(
+  p: NonNullable<StudyOutlineChapterLean["classNotes"]>[number],
+  timeZone: string,
+  fallbackId: string,
+) {
+  const d = p.publishedAt ? new Date(p.publishedAt) : null;
+  return {
+    id: p._id?.toString() || fallbackId,
+    title: p.title,
+    publishedAt: d ? d.toISOString() : null,
+    publishedAtLabel: d ? dayMonthLabelInTz(d, timeZone) : "",
+    pdfUrl: p.pdfUrl,
+    viewerMode: p.viewerMode === "newTab" ? ("newTab" as const) : ("inline" as const),
+    sortOrder: p.sortOrder ?? 0,
+  };
+}
+
+learnerMeRouter.get(
+  "/enrollments/:enrollmentId/chapters/:chapterId",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const { enrollmentId, chapterId } = req.params;
+    if (!mongoose.isValidObjectId(enrollmentId)) {
+      res.status(400).json({ error: "Invalid enrollment id" });
+      return;
+    }
+    const trimmedChapterId = String(chapterId ?? "").trim();
+    if (!trimmedChapterId || trimmedChapterId.length > 240) {
+      res.status(400).json({ error: "Invalid chapter id" });
+      return;
+    }
+
+    const row = await Enrollment.findOne({
+      _id: enrollmentId,
+      user: req.userId,
+      status: "active",
+    })
+      .populate({
+        path: "batch",
+        populate: { path: "course" },
+      })
+      .lean();
+
+    if (!row || !row.batch || typeof row.batch !== "object") {
+      res.status(404).json({ error: "Enrollment not found" });
+      return;
+    }
+
+    const batch = row.batch as unknown as {
+      _id: mongoose.Types.ObjectId;
+      code: string;
+      startsAt: Date;
+      endsAt: Date;
+      course?: CourseLeanMini & { _id?: mongoose.Types.ObjectId };
+    };
+
+    if (!batch.code || !batch._id) {
+      res.status(404).json({ error: "Enrollment not found" });
+      return;
+    }
+
+    const courseMini = batch.course;
+    if (!courseMini?._id) {
+      res.status(404).json({ error: "Course not found" });
+      return;
+    }
+
+    const courseOid = courseMini._id;
+    const c = await Course.findById(courseOid).lean();
+    if (!c?.isActive) {
+      res.status(404).json({ error: "Course not found" });
+      return;
+    }
+
+    const cl = c as unknown as SharedCourseLean;
+    const programTitle = programTitleFromCourse(cl);
+
+    const outline = await CourseStudyOutline.findOne({ course: courseOid }).lean();
+    const ctx = findChapterContext(
+      outline as { subjects?: StudyOutlineSubjectLean[] } | null,
+      trimmedChapterId,
+    );
+    if (!ctx) {
+      res.status(404).json({ error: "Chapter not found" });
+      return;
+    }
+
+    const ch = ctx.chapter;
+    const lecturesSorted = sortByResourceOrder(ch.lectures ?? []);
+    const teacherIds = [
+      ...new Set(
+        lecturesSorted
+          .map((l) => l.teacher)
+          .filter((id): id is mongoose.Types.ObjectId => Boolean(id)),
+      ),
+    ];
+    const teacherDocs =
+      teacherIds.length > 0
+        ? await Teacher.find({ _id: { $in: teacherIds } })
+            .select({ name: 1, imageUrl: 1 })
+            .lean()
+        : [];
+    const teacherById = new Map(
+      teacherDocs.map((t) => [
+        t._id.toString(),
+        {
+          name: String(t.name ?? "").trim() || "Mentor",
+          imageUrl: String(t.imageUrl ?? "").trim(),
+        },
+      ]),
+    );
+
+    const lectures = lecturesSorted.map((l, i) => {
+      const tid = l.teacher?.toString();
+      const tMeta = tid ? teacherById.get(tid) : undefined;
+      return {
+        id: l._id?.toString() || `lec-${i}`,
+        title: l.title,
+        durationSec: l.durationSec,
+        videoUrl: l.videoUrl,
+        subjectTag: ctx.subjectLabel,
+        teacherName: tMeta?.name ?? "",
+        teacherImageUrl: tMeta?.imageUrl ?? "",
+      };
+    });
+
+    const tz = env.scheduleTz;
+
+    const startsAt = new Date(batch.startsAt);
+    const endsAt = new Date(batch.endsAt);
+
+    res.json({
+      chapterMeta: {
+        chapterId: trimmedChapterId,
+        chapterTitle: ch.title,
+        subjectKey: ctx.subjectKey,
+        subjectLabel: ctx.subjectLabel,
+        batchDateRangeLabel: formatBatchDateRange(startsAt, endsAt),
+        programTitle,
+      },
+      lectures,
+      classNotes: sortByResourceOrder(ch.classNotes ?? []).map((p, i) =>
+        mapOutlinePdfRow(p, tz, `class-note-${i}`),
+      ),
+      chapterPdfs: sortByResourceOrder(ch.chapterPdfs ?? []).map((p, i) =>
+        mapOutlinePdfRow(p, tz, `chapter-pdf-${i}`),
+      ),
+      dhaSolutions: sortByResourceOrder(ch.dhaSolutions ?? []).map((p, i) =>
+        mapOutlinePdfRow(p, tz, `dha-${i}`),
+      ),
+    });
+  }),
+);
 
 learnerMeRouter.get(
   "/enrollments/:enrollmentId/program",
@@ -199,7 +436,10 @@ learnerMeRouter.get(
         key: s.key,
         label: s.label,
         sortOrder: s.sortOrder ?? 0,
-        chapters: (s.chapters ?? []).map((ch) => ({
+        chapters: sortOutlineChapters(
+          [...(s.chapters ?? [])] as StudyOutlineChapterLean[],
+        ).map((ch, idx) => ({
+          id: ch._id?.toString() || `${s.key}~${idx}`,
           title: ch.title,
           videoCount: ch.videoCount ?? 0,
           exerciseCount: ch.exerciseCount ?? 0,
@@ -282,6 +522,7 @@ learnerMeRouter.get(
           teacherImageUrl: s.teacherImageUrl,
           statusMicrocopy: s.statusMicrocopy,
           hasAttachments: s.hasAttachments,
+          meetUrl: s.meetUrl,
         }),
       );
 
@@ -306,6 +547,7 @@ learnerMeRouter.get(
           teacherImageUrl: s.teacherImageUrl,
           statusMicrocopy: s.statusMicrocopy,
           hasAttachments: s.hasAttachments,
+          meetUrl: s.meetUrl,
         }),
       );
     }
@@ -452,6 +694,7 @@ learnerMeRouter.get(
             teacherImageUrl: row.teacherImageUrl,
             statusMicrocopy: row.statusMicrocopy,
             hasAttachments: row.hasAttachments,
+            meetUrl: row.meetUrl,
           }),
         ),
       });

@@ -11,6 +11,8 @@ const classSessionSchema = new Schema(
     teacherImageUrl: { type: String, default: "", trim: true },
     statusMicrocopy: { type: String, default: "", trim: true, maxlength: 280 },
     hasAttachments: { type: Boolean, default: false },
+    /** Live class link (e.g. Google Meet); shown on learner dashboard when set. */
+    meetUrl: { type: String, default: "", trim: true, maxlength: 2048 },
     sortOrder: { type: Number, default: 0 },
   },
   { timestamps: true },
