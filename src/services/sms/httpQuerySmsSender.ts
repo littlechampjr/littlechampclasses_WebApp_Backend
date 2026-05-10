@@ -6,21 +6,34 @@ function mobilesParam(toE164: string): string {
   return toE164.replace(/\D/g, "");
 }
 
+/** Strip accidental ?query if .env pasted a full sample URL — credentials must come from env vars. */
+function smsEndpointBase(): string {
+  const raw = env.smsApiUrl.trim().replace(/[?&]$/, "");
+  if (!raw) return "";
+  try {
+    const u = new URL(raw);
+    return `${u.origin}${u.pathname}`.replace(/\/$/, "") || u.origin;
+  } catch {
+    const beforeQuery = raw.split("?")[0]?.trim() ?? raw;
+    return beforeQuery.replace(/[?&]$/, "");
+  }
+}
+
 function assertHttpSmsConfig(): void {
   const missing: string[] = [];
-  if (!env.smsApiUrl) missing.push("SMS_API_URL");
+  if (!smsEndpointBase()) missing.push("SMS_API_URL");
   if (!env.smsAuthKey) missing.push("SMS_AUTH_KEY");
   if (!env.smsSenderId) missing.push("SMS_SENDER");
   if (!env.smsRoute) missing.push("SMS_ROUTE");
   if (!env.smsDltTemplateId) missing.push("SMS_DLT_TEMPLATE_ID");
   if (missing.length > 0) {
-    throw new Error(`SMS_PROVIDER=http but missing env: ${missing.join(", ")}`);
+    throw new Error(`HTTP SMS is enabled but missing env: ${missing.join(", ")}`);
   }
 }
 
 /**
- * GET SMS API: base URL + query (authkey, mobiles, message, sender, route, country, DLT_TE_ID).
- * Message is URL-encoded (e.g. # → %23).
+ * DigiCoders / MSG91-style GET: SMS_API_URL?authkey=&mobiles=&message=&sender=&route=&country=&DLT_TE_ID=
+ * `mobiles` and `message` come from each send (OTP text from routes).
  */
 export class HttpQuerySmsSender implements SmsSender {
   async send(payload: SmsPayload): Promise<void> {
@@ -36,7 +49,7 @@ export class HttpQuerySmsSender implements SmsSender {
       DLT_TE_ID: env.smsDltTemplateId,
     });
 
-    const base = env.smsApiUrl.replace(/[?&]$/, "");
+    const base = smsEndpointBase();
     const sep = base.includes("?") ? "&" : "?";
     const url = `${base}${sep}${params.toString()}`;
 

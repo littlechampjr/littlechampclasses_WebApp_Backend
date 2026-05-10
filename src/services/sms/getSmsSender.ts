@@ -7,7 +7,7 @@ export function getSmsSender(): SmsSender {
   if (env.smsProvider === "mock") {
     return new MockSmsSender();
   }
-  if (env.smsProvider === "http") {
+  if (env.smsProvider === "http" || env.smsProvider === "digicoders") {
     return new HttpQuerySmsSender();
   }
   return new MockSmsSender();

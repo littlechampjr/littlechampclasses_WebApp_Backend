@@ -70,8 +70,18 @@ export const env = {
   /** Pepper for OTP code hashing. In development, defaults to `jwtSecret` if unset. */
   otpPepper: "" as string,
   otpTtlMs: Number(process.env.OTP_TTL_MS) || 5 * 60 * 1000,
-  smsProvider: (process.env.SMS_PROVIDER?.trim() || "mock").toLowerCase(),
-  /** Used when SMS_PROVIDER=http — MSG91-style GET API. */
+  /**
+   * mock | http | digicoders. If SMS_PROVIDER is unset and SMS_API_URL is set, defaults to http
+   * (DigiCoders / MSG91-style sendhttp.php).
+   */
+  smsProvider: (() => {
+    const explicit = process.env.SMS_PROVIDER?.trim().toLowerCase();
+    if (explicit === "mock") return "mock";
+    if (explicit === "http" || explicit === "digicoders") return explicit;
+    if (explicit) return explicit;
+    return process.env.SMS_API_URL?.trim() ? "http" : "mock";
+  })(),
+  /** Base only, e.g. http://sms.digicoders.in/api/sendhttp.php (no ?authkey=…). */
   smsApiUrl: process.env.SMS_API_URL?.trim() ?? "",
   smsAuthKey: process.env.SMS_AUTH_KEY?.trim() ?? "",
   smsSenderId: process.env.SMS_SENDER?.trim() ?? "",
