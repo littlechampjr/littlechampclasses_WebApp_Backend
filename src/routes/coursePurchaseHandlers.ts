@@ -1,11 +1,12 @@
 import type { Request, Response } from "express";
-import { z } from "zod";
 import type { Types } from "mongoose";
+import { z } from "zod";
 import { Course } from "../models/Course.js";
 import { CourseBatch } from "../models/CourseBatch.js";
 import { CoursePurchase } from "../models/CoursePurchase.js";
 import { Enrollment } from "../models/Enrollment.js";
 import { User } from "../models/User.js";
+import { couponBlockReason } from "../services/couponEligibility.js";
 import {
   buildListAndStrikePaise,
   computeCouponDiscountPaise,
@@ -35,7 +36,11 @@ const verifyBody = z.object({
 });
 
 async function loadCourseForPurchase(slug: string): Promise<CourseLean | null> {
-  const c = await Course.findOne({ slug, isActive: true }).lean();
+  const c = await Course.findOne({
+    slug,
+    isActive: true,
+    status: { $nin: ["draft"] },
+  }).lean();
   return c as CourseLean | null;
 }
 
@@ -134,6 +139,13 @@ export async function postValidateCourseCoupon(req: Request, res: Response): Pro
     return;
   }
 
+  const courseOid = course._id as Types.ObjectId;
+  const block = await couponBlockReason(courseOid, def);
+  if (block) {
+    res.status(400).json({ error: block });
+    return;
+  }
+
   const couponDiscountPaise = computeCouponDiscountPaise(def, basePayable);
   const finalAmountPaise = finalAmountAfterCoupon(basePayable, couponDiscountPaise);
 
@@ -159,9 +171,16 @@ export async function getCourseCouponCatalog(req: Request, res: Response): Promi
     res.status(404).json({ error: "Purchase flow is not enabled for this course" });
     return;
   }
-  const items = (pf.coupons ?? [])
-    .filter((c) => c.active !== false)
-    .map((c) => ({ code: c.code, label: c.label }));
+  const courseOid = course._id as Types.ObjectId;
+  const items: { code: string; label: string }[] = [];
+  for (const raw of pf.coupons ?? []) {
+    if (raw.active === false) continue;
+    const def = findCouponDef(pf, String(raw.code ?? ""));
+    if (!def) continue;
+    const block = await couponBlockReason(courseOid, def);
+    if (block) continue;
+    items.push({ code: def.code, label: def.label });
+  }
   res.json({ items });
 }
 
@@ -206,6 +225,12 @@ export async function postCreateCoursePurchaseOrder(req: Request, res: Response)
     const def = findCouponDef(pf, rawCoupon);
     if (!def) {
       res.status(400).json({ error: "Invalid or inactive coupon code" });
+      return;
+    }
+    const courseOidForCoupon = course._id as Types.ObjectId;
+    const block = await couponBlockReason(courseOidForCoupon, def);
+    if (block) {
+      res.status(400).json({ error: block });
       return;
     }
     couponDiscountPaise = computeCouponDiscountPaise(def, basePayable);

@@ -27,6 +27,9 @@ const coursePurchaseSchema = new Schema(
   { timestamps: true },
 );
 
+coursePurchaseSchema.index({ status: 1, createdAt: -1 });
+coursePurchaseSchema.index({ course: 1, couponCode: 1, status: 1 });
+
 export type CoursePurchaseDoc = mongoose.InferSchemaType<typeof coursePurchaseSchema> & {
   _id: mongoose.Types.ObjectId;
 };

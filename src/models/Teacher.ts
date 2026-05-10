@@ -6,6 +6,8 @@ const teacherSchema = new Schema(
     imageUrl: { type: String, default: "", trim: true },
     /** Short bio line for cards (optional). */
     bioLine: { type: String, default: "", trim: true, maxlength: 280 },
+    /** Subject tags for admin CMS (e.g. Mathematics, English). */
+    subjectExpertise: { type: [String], default: [] },
     isActive: { type: Boolean, default: true, index: true },
   },
   { timestamps: true },
