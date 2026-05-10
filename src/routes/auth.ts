@@ -1,11 +1,11 @@
 import { Router } from "express";
-import jwt from "jsonwebtoken";
 import { z } from "zod";
 import { env } from "../env.js";
 import { User } from "../models/User.js";
 import { createOtpChallenge, verifyOtpChallenge } from "../services/otpChallengeService.js";
 import { getSmsSender } from "../services/sms/getSmsSender.js";
 import { asyncHandler } from "../util/asyncHandler.js";
+import { signUserAuthJwt } from "../util/authJwt.js";
 import { normalizeIndianMobile } from "../util/phone.js";
 import { rateLimit } from "../compat/vendorMiddleware.js";
 import type { UserDoc } from "../models/User.js";
@@ -37,10 +37,6 @@ const verifyOtpLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many verification attempts. Please try again later." },
 });
-
-function signToken(userId: string, phoneE164: string) {
-  return jwt.sign({ sub: userId, phone: phoneE164 }, env.jwtSecret, { expiresIn: "14d" });
-}
 
 export function publicUserResponse(user: UserDoc | Record<string, unknown>) {
   const u = user as {
@@ -127,7 +123,7 @@ authRouter.post(
         profileComplete: false,
       });
     }
-    const token = signToken(user._id.toString(), user.phoneE164);
+    const token = signUserAuthJwt(user._id.toString(), user.phoneE164);
     res.json({
       token,
       user: publicUserResponse(user),

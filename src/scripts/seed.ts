@@ -285,6 +285,7 @@ async function seedDashboardQaData() {
       teacherImageUrl: "",
       statusMicrocopy: "Stay tuned! Class details will be added soon.",
       hasAttachments: i % 3 === 0,
+      meetUrl: i === 0 ? "https://meet.google.com/lookup/seed-demo-class" : "",
       sortOrder: i,
     });
     cursor = addDays(cursor, 1);

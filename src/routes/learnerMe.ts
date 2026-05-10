@@ -61,12 +61,14 @@ function mapSessionDto(s: {
   teacherImageUrl?: string;
   statusMicrocopy?: string;
   hasAttachments?: boolean;
+  meetUrl?: string;
 }) {
   const tz = env.scheduleTz;
   const ymdToday = todayYmd(tz);
   const ymdSession = ymdInTz(s.startsAt, tz);
   const ymdTomorrow = ymdInTz(addDays(zonedDayStartUtc(ymdToday, tz), 1), tz);
   const isTomorrow = ymdSession === ymdTomorrow;
+  const meetUrl = typeof s.meetUrl === "string" ? s.meetUrl.trim() : "";
   return {
     id: s._id.toString(),
     title: s.title,
@@ -79,6 +81,7 @@ function mapSessionDto(s: {
     teacherImageUrl: s.teacherImageUrl ?? "",
     statusMicrocopy: s.statusMicrocopy ?? "",
     hasAttachments: Boolean(s.hasAttachments),
+    meetUrl,
     scheduleDateYmd: ymdSession,
     dayLabel: `${dayMonthLabelInTz(s.startsAt, tz)} · ${weekdayShortInTz(s.startsAt, tz)}`,
     isTomorrow,
@@ -282,6 +285,7 @@ learnerMeRouter.get(
           teacherImageUrl: s.teacherImageUrl,
           statusMicrocopy: s.statusMicrocopy,
           hasAttachments: s.hasAttachments,
+          meetUrl: s.meetUrl,
         }),
       );
 
@@ -306,6 +310,7 @@ learnerMeRouter.get(
           teacherImageUrl: s.teacherImageUrl,
           statusMicrocopy: s.statusMicrocopy,
           hasAttachments: s.hasAttachments,
+          meetUrl: s.meetUrl,
         }),
       );
     }
@@ -452,6 +457,7 @@ learnerMeRouter.get(
             teacherImageUrl: row.teacherImageUrl,
             statusMicrocopy: row.statusMicrocopy,
             hasAttachments: row.hasAttachments,
+            meetUrl: row.meetUrl,
           }),
         ),
       });
