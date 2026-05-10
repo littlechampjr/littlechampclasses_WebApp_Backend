@@ -70,7 +70,14 @@ export const env = {
   /** Pepper for OTP code hashing. In development, defaults to `jwtSecret` if unset. */
   otpPepper: "" as string,
   otpTtlMs: Number(process.env.OTP_TTL_MS) || 5 * 60 * 1000,
-  smsProvider: (process.env.SMS_PROVIDER ?? "mock").trim().toLowerCase(),
+  smsProvider: (process.env.SMS_PROVIDER?.trim() || "mock").toLowerCase(),
+  /** Used when SMS_PROVIDER=http — MSG91-style GET API. */
+  smsApiUrl: process.env.SMS_API_URL?.trim() ?? "",
+  smsAuthKey: process.env.SMS_AUTH_KEY?.trim() ?? "",
+  smsSenderId: process.env.SMS_SENDER?.trim() ?? "",
+  smsRoute: process.env.SMS_ROUTE?.trim() ?? "",
+  smsCountry: process.env.SMS_COUNTRY?.trim() || "91",
+  smsDltTemplateId: process.env.SMS_DLT_TEMPLATE_ID?.trim() ?? "",
   razorpayKeyId: process.env.RAZORPAY_KEY_ID?.trim() ?? "",
   razorpayKeySecret: process.env.RAZORPAY_KEY_SECRET?.trim() ?? "",
   razorpayWebhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET?.trim() ?? "",
