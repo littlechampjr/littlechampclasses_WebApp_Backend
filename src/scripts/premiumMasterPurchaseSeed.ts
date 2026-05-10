@@ -242,6 +242,13 @@ async function upsertPremiumMasterLearningArtifacts(courseId: mongoose.Types.Obj
     { upsert: true, new: true },
   );
 
+  const VIDEO_SAMPLE_1 =
+    "https://connectcrmfile.s3.ap-south-1.amazonaws.com/Toast+-+Animated+Short+Film+by+GULU+%23bread+%23animation+%23cartoon_720p.mp4";
+  const VIDEO_SAMPLE_2 =
+    "https://connectcrmfile.s3.ap-south-1.amazonaws.com/CEREAL!+-+Animated+Student+Film_1080p.mp4";
+  const PDF_SAMPLE_NOTES =
+    "https://connectcrmfile.s3.ap-south-1.amazonaws.com/primeFactorization.pdf";
+
   await CourseStudyOutline.findOneAndUpdate(
     { course: courseId },
     {
@@ -254,10 +261,37 @@ async function upsertPremiumMasterLearningArtifacts(courseId: mongoose.Types.Obj
           chapters: [
             {
               title: "Block A — Number systems",
-              videoCount: 3,
+              videoCount: 2,
               exerciseCount: 0,
-              noteCount: 3,
+              noteCount: 1,
               sortOrder: 0,
+              lectures: [
+                {
+                  title: "Prime Factorisation",
+                  durationSec: 4534,
+                  videoUrl: VIDEO_SAMPLE_1,
+                  teacher: tMath?._id,
+                  sortOrder: 0,
+                },
+                {
+                  title: "Fun With Fractions",
+                  durationSec: 2789,
+                  videoUrl: VIDEO_SAMPLE_2,
+                  teacher: tSci?._id,
+                  sortOrder: 1,
+                },
+              ],
+              classNotes: [
+                {
+                  title: "Prime factorization — class notes",
+                  publishedAt: new Date("2026-05-02T12:00:00.000Z"),
+                  pdfUrl: PDF_SAMPLE_NOTES,
+                  viewerMode: "inline",
+                  sortOrder: 0,
+                },
+              ],
+              chapterPdfs: [],
+              dhaSolutions: [],
             },
           ],
         },
@@ -272,6 +306,10 @@ async function upsertPremiumMasterLearningArtifacts(courseId: mongoose.Types.Obj
               exerciseCount: 0,
               noteCount: 2,
               sortOrder: 0,
+              lectures: [],
+              classNotes: [],
+              chapterPdfs: [],
+              dhaSolutions: [],
             },
           ],
         },
@@ -286,6 +324,10 @@ async function upsertPremiumMasterLearningArtifacts(courseId: mongoose.Types.Obj
               exerciseCount: 0,
               noteCount: 1,
               sortOrder: 0,
+              lectures: [],
+              classNotes: [],
+              chapterPdfs: [],
+              dhaSolutions: [],
             },
           ],
         },

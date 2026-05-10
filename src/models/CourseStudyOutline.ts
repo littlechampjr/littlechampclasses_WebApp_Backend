@@ -1,5 +1,31 @@
 import mongoose, { Schema } from "mongoose";
 
+const lectureVideoSchema = new Schema(
+  {
+    title: { type: String, required: true, trim: true, maxlength: 300 },
+    durationSec: { type: Number, required: true, min: 0, max: 864_000 },
+    videoUrl: { type: String, required: true, trim: true, maxlength: 2048 },
+    teacher: { type: Schema.Types.ObjectId, ref: "Teacher" },
+    sortOrder: { type: Number, default: 0 },
+  },
+  { _id: true },
+);
+
+const pdfResourceSchema = new Schema(
+  {
+    title: { type: String, required: true, trim: true, maxlength: 300 },
+    publishedAt: { type: Date, default: null },
+    pdfUrl: { type: String, required: true, trim: true, maxlength: 2048 },
+    viewerMode: {
+      type: String,
+      enum: ["inline", "newTab"],
+      default: "inline",
+    },
+    sortOrder: { type: Number, default: 0 },
+  },
+  { _id: true },
+);
+
 const studyChapterSchema = new Schema(
   {
     title: { type: String, required: true, trim: true, maxlength: 200 },
@@ -7,8 +33,12 @@ const studyChapterSchema = new Schema(
     exerciseCount: { type: Number, default: 0, min: 0 },
     noteCount: { type: Number, default: 0, min: 0 },
     sortOrder: { type: Number, default: 0 },
+    lectures: { type: [lectureVideoSchema], default: [] },
+    classNotes: { type: [pdfResourceSchema], default: [] },
+    chapterPdfs: { type: [pdfResourceSchema], default: [] },
+    dhaSolutions: { type: [pdfResourceSchema], default: [] },
   },
-  { _id: false },
+  { _id: true },
 );
 
 const studySubjectSchema = new Schema(
