@@ -12,7 +12,7 @@ function requireEnv(name: string, value: string | undefined): string {
 }
 
 const frontendRaw =
-  [process.env.FRONTEND_URL, process.env.ADMIN_FRONTEND_URL].filter(Boolean).join(",") ||
+  [process.env.FRONTEND_URL,process.env.ADMIN_FRONTEND_URL].filter(Boolean).join(",") ||
   "http://localhost:3000,http://localhost:3001";
 
 function normalizeOrigin(url: string): string {
