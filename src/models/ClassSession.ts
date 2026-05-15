@@ -10,7 +10,6 @@ const classSessionSchema = new Schema(
     teacherName: { type: String, default: "", trim: true },
     teacherImageUrl: { type: String, default: "", trim: true },
     teacher: { type: Schema.Types.ObjectId, ref: "Teacher", default: null, index: true },
-    meetUrl: { type: String, default: "", trim: true },
     statusMicrocopy: { type: String, default: "", trim: true, maxlength: 280 },
     hasAttachments: { type: Boolean, default: false },
     /** Live class link (e.g. Google Meet); shown on learner dashboard when set. */

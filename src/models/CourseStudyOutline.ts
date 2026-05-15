@@ -1,16 +1,5 @@
 import mongoose, { Schema } from "mongoose";
 
-const lectureVideoSchema = new Schema(
-  {
-    title: { type: String, required: true, trim: true, maxlength: 300 },
-    durationSec: { type: Number, required: true, min: 0, max: 864_000 },
-    videoUrl: { type: String, required: true, trim: true, maxlength: 2048 },
-    teacher: { type: Schema.Types.ObjectId, ref: "Teacher" },
-    sortOrder: { type: Number, default: 0 },
-  },
-  { _id: true },
-);
-
 const pdfResourceSchema = new Schema(
   {
     title: { type: String, required: true, trim: true, maxlength: 300 },

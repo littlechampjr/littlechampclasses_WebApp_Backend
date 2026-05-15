@@ -83,7 +83,7 @@ function mapSessionDto(s: {
     teacherImageUrl: s.teacherImageUrl ?? "",
     statusMicrocopy: s.statusMicrocopy ?? "",
     hasAttachments: Boolean(s.hasAttachments),
-    meetUrl: s.meetUrl ?? "",
+    meetUrl,
     scheduleDateYmd: ymdSession,
     dayLabel: `${dayMonthLabelInTz(s.startsAt, tz)} · ${weekdayShortInTz(s.startsAt, tz)}`,
     isTomorrow,
@@ -119,11 +119,21 @@ type StudyOutlineChapterLean = {
   noteCount?: number;
   sortOrder?: number;
   lectures?: Array<{
-    _id: mongoose.Types.ObjectId;
+    _id?: mongoose.Types.ObjectId;
     title: string;
-    durationSec: number;
+    durationMinutes?: number;
+    subjectLabel?: string;
     videoUrl: string;
-    teacher?: mongoose.Types.ObjectId;
+    thumbnailUrl?: string;
+    teacher?: mongoose.Types.ObjectId | null;
+    sortOrder?: number;
+  }>;
+  notes?: Array<{
+    _id?: mongoose.Types.ObjectId;
+    title: string;
+    kind: string;
+    occurredAt: Date;
+    fileUrl: string;
     sortOrder?: number;
   }>;
   classNotes?: Array<{
@@ -145,7 +155,7 @@ type StudyOutlineSubjectLean = {
   chapters?: StudyOutlineChapterLean[];
 };
 
-function sortOutlineChapters(chapters: StudyOutlineChapterLean[]): StudyOutlineChapterLean[] {
+function sortOutlineChapters<T extends { sortOrder?: number }>(chapters: T[]): T[] {
   return [...chapters].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
 }
 
@@ -305,10 +315,15 @@ learnerMeRouter.get(
     const lectures = lecturesSorted.map((l, i) => {
       const tid = l.teacher?.toString();
       const tMeta = tid ? teacherById.get(tid) : undefined;
+      const legacySec = (l as { durationSec?: number }).durationSec;
+      const durationSec =
+        legacySec != null && Number.isFinite(legacySec)
+          ? Math.round(legacySec)
+          : Math.round(Number(l.durationMinutes ?? 0) * 60);
       return {
         id: l._id?.toString() || `lec-${i}`,
         title: l.title,
-        durationSec: l.durationSec,
+        durationSec,
         videoUrl: l.videoUrl,
         subjectTag: ctx.subjectLabel,
         teacherName: tMeta?.name ?? "",
@@ -444,9 +459,7 @@ learnerMeRouter.get(
         key: s.key,
         label: s.label,
         sortOrder: s.sortOrder ?? 0,
-        chapters: sortOutlineChapters(
-          [...(s.chapters ?? [])] as StudyOutlineChapterLean[],
-        ).map((ch, idx) => {
+        chapters: sortOutlineChapters([...(s.chapters ?? [])]).map((ch, idx) => {
           const raw = ch as unknown as Record<string, unknown>;
           const lecturesRaw = Array.isArray(raw.lectures) ? raw.lectures : [];
           const notesRaw = Array.isArray(raw.notes) ? raw.notes : [];

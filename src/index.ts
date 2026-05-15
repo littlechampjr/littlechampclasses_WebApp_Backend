@@ -51,7 +51,12 @@ app.use(
   }),
 );
 
-app.use(async (_req, _res, next) => {
+app.use(async (req, _res, next) => {
+  // CORS preflight must not wait on MongoDB or the browser shows a long‑pending POST (provisional headers).
+  if (req.method === "OPTIONS") {
+    next();
+    return;
+  }
   try {
     await connectDb();
     next();
