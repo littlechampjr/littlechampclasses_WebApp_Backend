@@ -1,16 +1,5 @@
 import mongoose, { Schema } from "mongoose";
 
-const lectureVideoSchema = new Schema(
-  {
-    title: { type: String, required: true, trim: true, maxlength: 300 },
-    durationSec: { type: Number, required: true, min: 0, max: 864_000 },
-    videoUrl: { type: String, required: true, trim: true, maxlength: 2048 },
-    teacher: { type: Schema.Types.ObjectId, ref: "Teacher" },
-    sortOrder: { type: Number, default: 0 },
-  },
-  { _id: true },
-);
-
 const pdfResourceSchema = new Schema(
   {
     title: { type: String, required: true, trim: true, maxlength: 300 },
@@ -26,6 +15,40 @@ const pdfResourceSchema = new Schema(
   { _id: true },
 );
 
+const dateRangeSchema = new Schema(
+  {
+    start: { type: Date, default: null },
+    end: { type: Date, default: null },
+  },
+  { _id: false },
+);
+
+const outlineLectureSchema = new Schema(
+  {
+    title: { type: String, required: true, trim: true, maxlength: 300 },
+    durationMinutes: { type: Number, default: 0, min: 0 },
+    subjectLabel: { type: String, default: "", trim: true, maxlength: 120 },
+    videoUrl: { type: String, default: "", trim: true },
+    thumbnailUrl: { type: String, default: "", trim: true },
+    teacher: { type: Schema.Types.ObjectId, ref: "Teacher", default: null },
+    sortOrder: { type: Number, default: 0 },
+  },
+  { _id: true },
+);
+
+const NOTE_KINDS = ["class_note", "chapter_pdf", "dha"] as const;
+
+const outlineNoteSchema = new Schema(
+  {
+    title: { type: String, required: true, trim: true, maxlength: 300 },
+    kind: { type: String, enum: NOTE_KINDS, required: true },
+    occurredAt: { type: Date, required: true },
+    fileUrl: { type: String, required: true, trim: true },
+    sortOrder: { type: Number, default: 0 },
+  },
+  { _id: true },
+);
+
 const studyChapterSchema = new Schema(
   {
     title: { type: String, required: true, trim: true, maxlength: 200 },
@@ -33,7 +56,9 @@ const studyChapterSchema = new Schema(
     exerciseCount: { type: Number, default: 0, min: 0 },
     noteCount: { type: Number, default: 0, min: 0 },
     sortOrder: { type: Number, default: 0 },
-    lectures: { type: [lectureVideoSchema], default: [] },
+    dateRange: { type: dateRangeSchema, default: undefined },
+    lectures: { type: [outlineLectureSchema], default: [] },
+    notes: { type: [outlineNoteSchema], default: [] },
     classNotes: { type: [pdfResourceSchema], default: [] },
     chapterPdfs: { type: [pdfResourceSchema], default: [] },
     dhaSolutions: { type: [pdfResourceSchema], default: [] },

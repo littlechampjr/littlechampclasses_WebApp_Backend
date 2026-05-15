@@ -17,6 +17,9 @@ import {
 
 export const coursesRouter = Router();
 
+/** Public catalog + checkout: exclude drafts (legacy docs without `status` remain visible). */
+const catalogCourseWhere = { isActive: true, status: { $nin: ["draft"] as const } } as const;
+
 /** Homepage “Pick a program” strip — order preserved. */
 const HOME_FEATURED_SLUGS = [
   "after-school-spark-demo",
@@ -128,6 +131,10 @@ export function mapCourse(c: CourseLean, batches: CourseBatchDto[]) {
     marketingTitle,
     marketingBullets,
     classStartsAt: c.classStartsAt ?? null,
+    scheduleStartsAt: c.scheduleStartsAt ?? null,
+    scheduleEndsAt: c.scheduleEndsAt ?? null,
+    status: c.status ?? "published",
+    tags: c.tags ?? [],
     isActive: c.isActive,
     bookDemoEnabled: c.bookDemoEnabled === true,
     batches,
@@ -149,7 +156,7 @@ coursesRouter.get(
 
   if (wantPurchaseFlow) {
     const found = await Course.find({
-      isActive: true,
+      ...catalogCourseWhere,
       "purchaseFlow.enabled": true,
     })
       .sort({ updatedAt: -1 })
@@ -171,7 +178,7 @@ coursesRouter.get(
   if (wantFeatured) {
     const found = await Course.find({
       slug: { $in: [...HOME_FEATURED_SLUGS] },
-      isActive: true,
+      ...catalogCourseWhere,
     }).lean();
     const bySlug = new Map(found.map((doc) => [doc.slug, doc]));
     const ordered = HOME_FEATURED_SLUGS.map((slug) => bySlug.get(slug)).filter(Boolean) as CourseLean[];
@@ -188,7 +195,7 @@ coursesRouter.get(
     return;
   }
 
-  const list = await Course.find({ isActive: true }).sort({ track: 1, title: 1 }).lean();
+  const list = await Course.find({ ...catalogCourseWhere }).sort({ track: 1, title: 1 }).lean();
   res.json({ courses: list.map((c) => mapCourse(c as CourseLean, [])) });
   }),
 );
@@ -226,7 +233,7 @@ coursesRouter.post(
 coursesRouter.get(
   "/:slug",
   asyncHandler(async (req, res) => {
-  const c = await Course.findOne({ slug: req.params.slug, isActive: true }).lean();
+  const c = await Course.findOne({ slug: req.params.slug, ...catalogCourseWhere }).lean();
   if (!c) {
     res.status(404).json({ error: "Course not found" });
     return;

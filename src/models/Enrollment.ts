@@ -21,6 +21,7 @@ const enrollmentSchema = new Schema(
 );
 
 enrollmentSchema.index({ user: 1, batch: 1 }, { unique: true });
+enrollmentSchema.index({ createdAt: -1 });
 
 export type EnrollmentDoc = mongoose.InferSchemaType<typeof enrollmentSchema> & {
   _id: mongoose.Types.ObjectId;

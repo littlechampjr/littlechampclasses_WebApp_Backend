@@ -7,6 +7,9 @@ const purchaseCouponDefSchema = new Schema(
     discountPaise: { type: Number, default: null, min: 0 },
     discountPercent: { type: Number, default: null, min: 0, max: 100 },
     active: { type: Boolean, default: true },
+    expiresAt: { type: Date, default: null },
+    maxRedemptions: { type: Number, default: null, min: 1 },
+    notes: { type: String, default: "", trim: true, maxlength: 500 },
   },
   { _id: false },
 );
@@ -102,6 +105,17 @@ const courseSchema = new Schema(
     /** Up to four lines for program cards (grades, duration, batch size, curriculum). */
     marketingBullets: { type: [String], default: [] },
     classStartsAt: { type: Date, default: null },
+    /** Optional CMS date range (e.g. program window); batches remain authoritative for enrollment. */
+    scheduleStartsAt: { type: Date, default: null },
+    scheduleEndsAt: { type: Date, default: null },
+    /** draft = hidden from public catalog; published = visible when isActive. Legacy docs default published. */
+    status: {
+      type: String,
+      enum: ["draft", "published"],
+      default: "published",
+      index: true,
+    },
+    tags: { type: [String], default: [] },
     isActive: { type: Boolean, default: true },
     /** Premium purchase flow CMS (optional). */
     purchaseFlow: { type: purchaseFlowSchema, default: undefined },

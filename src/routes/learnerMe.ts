@@ -2,6 +2,7 @@ import { addDays } from "date-fns";
 import { Router } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
+import { CourseAssignment } from "../models/CourseAssignment.js";
 import { ClassSession } from "../models/ClassSession.js";
 import { Course } from "../models/Course.js";
 import { CourseStudyOutline } from "../models/CourseStudyOutline.js";
@@ -118,11 +119,21 @@ type StudyOutlineChapterLean = {
   noteCount?: number;
   sortOrder?: number;
   lectures?: Array<{
-    _id: mongoose.Types.ObjectId;
+    _id?: mongoose.Types.ObjectId;
     title: string;
-    durationSec: number;
+    durationMinutes?: number;
+    subjectLabel?: string;
     videoUrl: string;
-    teacher?: mongoose.Types.ObjectId;
+    thumbnailUrl?: string;
+    teacher?: mongoose.Types.ObjectId | null;
+    sortOrder?: number;
+  }>;
+  notes?: Array<{
+    _id?: mongoose.Types.ObjectId;
+    title: string;
+    kind: string;
+    occurredAt: Date;
+    fileUrl: string;
     sortOrder?: number;
   }>;
   classNotes?: Array<{
@@ -144,7 +155,7 @@ type StudyOutlineSubjectLean = {
   chapters?: StudyOutlineChapterLean[];
 };
 
-function sortOutlineChapters(chapters: StudyOutlineChapterLean[]): StudyOutlineChapterLean[] {
+function sortOutlineChapters<T extends { sortOrder?: number }>(chapters: T[]): T[] {
   return [...chapters].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
 }
 
@@ -304,10 +315,15 @@ learnerMeRouter.get(
     const lectures = lecturesSorted.map((l, i) => {
       const tid = l.teacher?.toString();
       const tMeta = tid ? teacherById.get(tid) : undefined;
+      const legacySec = (l as { durationSec?: number }).durationSec;
+      const durationSec =
+        legacySec != null && Number.isFinite(legacySec)
+          ? Math.round(legacySec)
+          : Math.round(Number(l.durationMinutes ?? 0) * 60);
       return {
         id: l._id?.toString() || `lec-${i}`,
         title: l.title,
-        durationSec: l.durationSec,
+        durationSec,
         videoUrl: l.videoUrl,
         subjectTag: ctx.subjectLabel,
         teacherName: tMeta?.name ?? "",
@@ -402,13 +418,20 @@ learnerMeRouter.get(
     const batchesDto = mapBatchesForCourse(programTitle, rawBatches);
     const courseDto = mapCourse(cl, batchesDto);
 
-    const [assignments, faqs, outline] = await Promise.all([
+    const [teacherLinks, faqs, outline, homeworkRows] = await Promise.all([
       CourseTeacher.find({ course: courseOid }).populate("teacher").sort({ sortOrder: 1 }).lean(),
       ProgramFaq.find({ courseIds: courseOid, isActive: true }).sort({ sortOrder: 1 }).lean(),
       CourseStudyOutline.findOne({ course: courseOid }).lean(),
+      CourseAssignment.find({
+        course: courseOid,
+        isActive: true,
+        $or: [{ batch: null }, { batch: batch._id }],
+      })
+        .sort({ dueAt: 1 })
+        .lean(),
     ]);
 
-    const teachers = assignments
+    const teachers = teacherLinks
       .map((a) => {
         const t = a.teacher as
           | { _id: mongoose.Types.ObjectId; name?: string; imageUrl?: string; bioLine?: string }
@@ -436,17 +459,56 @@ learnerMeRouter.get(
         key: s.key,
         label: s.label,
         sortOrder: s.sortOrder ?? 0,
-        chapters: sortOutlineChapters(
-          [...(s.chapters ?? [])] as StudyOutlineChapterLean[],
-        ).map((ch, idx) => ({
+        chapters: sortOutlineChapters([...(s.chapters ?? [])]).map((ch, idx) => {
+          const raw = ch as unknown as Record<string, unknown>;
+          const lecturesRaw = Array.isArray(raw.lectures) ? raw.lectures : [];
+          const notesRaw = Array.isArray(raw.notes) ? raw.notes : [];
+          const dateRange = raw.dateRange as { start?: unknown; end?: unknown } | undefined;
+          const lectureCount = lecturesRaw.length;
+          const noteCountFromNotes = notesRaw.length;
+          return {
           id: ch._id?.toString() || `${s.key}~${idx}`,
-          title: ch.title,
-          videoCount: ch.videoCount ?? 0,
-          exerciseCount: ch.exerciseCount ?? 0,
-          noteCount: ch.noteCount ?? 0,
-          sortOrder: ch.sortOrder ?? 0,
-        })),
+            title: ch.title,
+            videoCount: lectureCount > 0 ? lectureCount : (ch.videoCount ?? 0),
+            exerciseCount: ch.exerciseCount ?? 0,
+            noteCount: noteCountFromNotes > 0 ? noteCountFromNotes : (ch.noteCount ?? 0),
+            sortOrder: ch.sortOrder ?? 0,
+            dateRange:
+              dateRange?.start != null || dateRange?.end != null
+                ? {
+                    start:
+                      dateRange.start != null ? new Date(String(dateRange.start)).toISOString() : null,
+                    end: dateRange.end != null ? new Date(String(dateRange.end)).toISOString() : null,
+                  }
+                : null,
+            lectures: lecturesRaw.map((lec: Record<string, unknown>) => ({
+              title: String(lec.title ?? ""),
+              durationMinutes: Number(lec.durationMinutes ?? 0),
+              subjectLabel: String(lec.subjectLabel ?? ""),
+              videoUrl: String(lec.videoUrl ?? ""),
+              thumbnailUrl: String(lec.thumbnailUrl ?? ""),
+              teacherId: lec.teacher ? String(lec.teacher) : null,
+              sortOrder: Number(lec.sortOrder ?? 0),
+            })),
+            notes: notesRaw.map((n: Record<string, unknown>) => ({
+              title: String(n.title ?? ""),
+              kind: String(n.kind ?? ""),
+              occurredAt:
+                n.occurredAt != null ? new Date(String(n.occurredAt)).toISOString() : new Date(0).toISOString(),
+              fileUrl: String(n.fileUrl ?? ""),
+              sortOrder: Number(n.sortOrder ?? 0),
+            })),
+          };
+        }),
       })) ?? [];
+
+    const homework = homeworkRows.map((h) => ({
+      id: h._id.toString(),
+      title: h.title,
+      description: h.description ?? "",
+      dueAt: h.dueAt.toISOString(),
+      attachmentUrl: h.attachmentUrl ?? "",
+    }));
 
     const startsAt = new Date(batch.startsAt);
     const endsAt = new Date(batch.endsAt);
@@ -465,6 +527,7 @@ learnerMeRouter.get(
       teachers,
       faqs: faqDtos,
       studyRoom: { subjects: studySubjects },
+      homework,
     });
   }),
 );

@@ -11,6 +11,9 @@ export type CouponDef = {
   discountPaise: number | null;
   discountPercent: number | null;
   active: boolean;
+  expiresAt?: Date | null;
+  maxRedemptions?: number | null;
+  notes?: string;
 };
 
 type CoursePriceFields = {
@@ -52,7 +55,27 @@ export function findCouponDef(flow: PurchaseFlowLean, rawCode: string): CouponDe
     const isActive = active !== false;
     return isActive && String((c as { code?: string }).code ?? "").toUpperCase() === code;
   });
-  return hit ? (hit as CouponDef) : null;
+  if (!hit) return null;
+  const row = hit as Record<string, unknown>;
+  return {
+    code: String(row.code ?? "").toUpperCase(),
+    label: String(row.label ?? ""),
+    discountPaise:
+      typeof row.discountPaise === "number" && Number.isFinite(row.discountPaise)
+        ? row.discountPaise
+        : null,
+    discountPercent:
+      typeof row.discountPercent === "number" && Number.isFinite(row.discountPercent)
+        ? row.discountPercent
+        : null,
+    active: row.active !== false,
+    expiresAt: row.expiresAt instanceof Date ? row.expiresAt : row.expiresAt ? new Date(String(row.expiresAt)) : null,
+    maxRedemptions:
+      typeof row.maxRedemptions === "number" && Number.isFinite(row.maxRedemptions)
+        ? row.maxRedemptions
+        : null,
+    notes: typeof row.notes === "string" ? row.notes : "",
+  };
 }
 
 export function computeCouponDiscountPaise(def: CouponDef, basePaise: number): number {

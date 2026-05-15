@@ -18,6 +18,10 @@ export type CourseLean = {
   marketingTitle?: string;
   marketingBullets?: string[];
   classStartsAt?: Date | null;
+  scheduleStartsAt?: Date | null;
+  scheduleEndsAt?: Date | null;
+  status?: "draft" | "published";
+  tags?: string[];
   isActive: boolean;
   bookDemoEnabled?: boolean;
   purchaseFlow?: unknown;

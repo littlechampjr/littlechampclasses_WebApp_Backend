@@ -11,7 +11,9 @@ function requireEnv(name: string, value: string | undefined): string {
   return trimmed;
 }
 
-const frontendRaw = process.env.FRONTEND_URL ?? "http://localhost:3000";
+const frontendRaw =
+  [process.env.FRONTEND_URL, process.env.ADMIN_FRONTEND_URL].filter(Boolean).join(",") ||
+  "http://localhost:3000,http://localhost:3001";
 
 function normalizeOrigin(url: string): string {
   const t = url.trim();
@@ -58,6 +60,10 @@ export const env = {
   jwtSecret: isDeployed
     ? requireEnv("JWT_SECRET", process.env.JWT_SECRET)
     : (process.env.JWT_SECRET ?? "dev-only-change-me"),
+  /** Separate secret so learner JWTs cannot be reused as admin tokens. */
+  adminJwtSecret: isDeployed
+    ? requireEnv("ADMIN_JWT_SECRET", process.env.ADMIN_JWT_SECRET)
+    : (process.env.ADMIN_JWT_SECRET ?? "dev-admin-jwt-change-me"),
   /** Comma-separated origins for CORS (no trailing path). www ⇄ apex is expanded automatically. */
   frontendOrigins: (() => {
     const list = frontendRaw
@@ -93,6 +99,13 @@ export const env = {
   razorpayWebhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET?.trim() ?? "",
   /** IANA timezone for schedule “today” / week boundaries (default Asia/Kolkata). */
   scheduleTz: (process.env.SCHEDULE_TZ ?? "Asia/Kolkata").trim() || "Asia/Kolkata",
+  /** S3-compatible uploads for admin presigned PUT (optional until configured). */
+  awsRegion: process.env.AWS_REGION?.trim() ?? "",
+  awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID?.trim() ?? "",
+  awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY?.trim() ?? "",
+  s3UploadBucket: process.env.S3_UPLOAD_BUCKET?.trim() ?? "",
+  /** Public base URL for objects after upload, e.g. https://cdn.example.com or https://bucket.s3.region.amazonaws.com */
+  s3PublicBaseUrl: process.env.S3_PUBLIC_BASE_URL?.replace(/\/$/, "").trim() ?? "",
 };
 
 {
