@@ -6,7 +6,12 @@ import { Course } from "../models/Course.js";
 import { CourseBatch } from "../models/CourseBatch.js";
 import { requireBookDemoToken } from "../middleware/bookDemoAuth.js";
 import { createOtpChallenge, verifyOtpChallenge } from "../services/otpChallengeService.js";
-import { getRazorpay, verifyPaymentSignature } from "../services/razorpayService.js";
+import {
+  createRazorpayOrder,
+  RazorpayServiceError,
+  verifyPaymentSignature,
+} from "../services/razorpayService.js";
+import { env } from "../env.js";
 import { getSmsSender } from "../services/sms/getSmsSender.js";
 import { publicUserResponse } from "./auth.js";
 import { asyncHandler } from "../util/asyncHandler.js";
@@ -14,7 +19,6 @@ import { signUserAuthJwt } from "../util/authJwt.js";
 import { signBookDemoToken } from "../util/bookDemoToken.js";
 import { linkPaidBookDemoToUserEnrollment } from "../util/linkBookDemoEnrollment.js";
 import { normalizeIndianMobile } from "../util/phone.js";
-import { env } from "../env.js";
 
 export const bookDemoRouter = Router();
 
@@ -199,25 +203,26 @@ bookDemoRouter.post(
       return;
     }
 
-    const rz = getRazorpay();
-    if (!rz) {
-      res.status(503).json({
-        error: "Payments are not configured. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.",
-      });
-      return;
-    }
-
     const receipt = `bd_${enrollment._id.toString().slice(-20)}`.replace(/[^a-zA-Z0-9_]/g, "_");
 
-    const order = await rz.orders.create({
-      amount: enrollment.amountPaise,
-      currency: enrollment.currency || "INR",
-      receipt: receipt.slice(0, 40),
-      notes: {
-        enrollmentId: enrollment._id.toString(),
-        purpose: "book_demo",
-      },
-    });
+    let order: { id: string };
+    try {
+      order = await createRazorpayOrder({
+        amountPaise: enrollment.amountPaise,
+        currency: enrollment.currency || "INR",
+        receipt,
+        notes: {
+          enrollmentId: enrollment._id.toString(),
+          purpose: "book_demo",
+        },
+      });
+    } catch (e) {
+      if (e instanceof RazorpayServiceError) {
+        res.status(e.statusCode).json({ error: e.message });
+        return;
+      }
+      throw e;
+    }
 
     enrollment.razorpayOrderId = order.id;
     enrollment.status = "payment_pending";

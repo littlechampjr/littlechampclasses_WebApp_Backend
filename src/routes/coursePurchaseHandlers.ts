@@ -15,7 +15,12 @@ import {
   mapPurchaseFlow,
   payableBeforeCouponPaise,
 } from "../services/coursePurchasePricing.js";
-import { getRazorpay, verifyPaymentSignature } from "../services/razorpayService.js";
+import {
+  createRazorpayOrder,
+  MIN_RAZORPAY_AMOUNT_PAISE,
+  RazorpayServiceError,
+  verifyPaymentSignature,
+} from "../services/razorpayService.js";
 import { env } from "../env.js";
 import { formatBatchDateRange } from "../util/bookDemoHeading.js";
 import { programTitleFromCourse, type CourseLean } from "./coursesShared.js";
@@ -239,10 +244,9 @@ export async function postCreateCoursePurchaseOrder(req: Request, res: Response)
 
   const amountPaise = finalAmountAfterCoupon(basePayable, couponDiscountPaise);
 
-  const rz = getRazorpay();
-  if (!rz) {
-    res.status(503).json({
-      error: "Payments are not configured. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.",
+  if (amountPaise < MIN_RAZORPAY_AMOUNT_PAISE) {
+    res.status(400).json({
+      error: `Amount must be at least ${MIN_RAZORPAY_AMOUNT_PAISE} paise.`,
     });
     return;
   }
@@ -263,16 +267,27 @@ export async function postCreateCoursePurchaseOrder(req: Request, res: Response)
   });
 
   const receipt = `cp_${purchase._id.toString().slice(-20)}`.replace(/[^a-zA-Z0-9_]/g, "_");
-  const order = await rz.orders.create({
-    amount: amountPaise,
-    currency: "INR",
-    receipt: receipt.slice(0, 40),
-    notes: {
-      coursePurchaseId: purchase._id.toString(),
-      courseId: course._id.toString(),
-      userId: req.userId!,
-    },
-  });
+
+  let order: { id: string };
+  try {
+    order = await createRazorpayOrder({
+      amountPaise,
+      currency: "INR",
+      receipt,
+      notes: {
+        coursePurchaseId: purchase._id.toString(),
+        courseId: course._id.toString(),
+        userId: req.userId!,
+      },
+    });
+  } catch (e) {
+    await CoursePurchase.deleteOne({ _id: purchase._id });
+    if (e instanceof RazorpayServiceError) {
+      res.status(e.statusCode).json({ error: e.message });
+      return;
+    }
+    throw e;
+  }
 
   purchase.razorpayOrderId = order.id;
   await purchase.save();
