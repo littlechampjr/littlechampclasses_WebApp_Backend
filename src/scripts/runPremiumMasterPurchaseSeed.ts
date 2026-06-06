@@ -1,5 +1,5 @@
 /**
- * Standalone: connects to MongoDB, upserts premium Master course + batch, then exits.
+ * Standalone: connects to MongoDB, upserts premium Exclusive Master Course + batch, then exits.
  * Run from backend root: npm run seed:premium
  * Requires MONGODB_URI in .env (or environment).
  */

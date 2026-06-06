@@ -35,7 +35,11 @@ adminTeachersRouter.get(
     const skip = (page - 1) * limit;
     const [total, rows] = await Promise.all([
       Teacher.countDocuments(filter),
-      Teacher.find(filter).sort({ name: 1 }).skip(skip).limit(limit).lean(),
+      Teacher.find(filter)
+        .sort({ displayOrder: 1, createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
     ]);
     res.json({
       total,
@@ -47,6 +51,9 @@ adminTeachersRouter.get(
         imageUrl: t.imageUrl ?? "",
         bioLine: t.bioLine ?? "",
         subjectExpertise: t.subjectExpertise ?? [],
+        modalTagline: t.modalTagline ?? "",
+        highlights: t.highlights ?? [],
+        displayOrder: t.displayOrder ?? 0,
         isActive: t.isActive !== false,
       })),
     });
@@ -58,6 +65,9 @@ const teacherBody = z.object({
   imageUrl: z.string().max(4000).optional(),
   bioLine: z.string().max(280).optional(),
   subjectExpertise: z.array(z.string().max(120)).optional(),
+  modalTagline: z.string().max(200).optional(),
+  highlights: z.array(z.string().max(200)).max(8).optional(),
+  displayOrder: z.number().int().optional(),
   isActive: z.boolean().optional(),
 });
 

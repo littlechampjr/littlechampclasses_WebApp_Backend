@@ -1,5 +1,5 @@
 /**
- * Upserts one premium CBSE Master course with purchaseFlow + batch.
+ * Upserts one premium CBSE Exclusive Master Course with purchaseFlow + batch.
  * Caller must establish Mongoose connection first (see seed.ts).
  */
 import mongoose from "mongoose";
@@ -23,7 +23,7 @@ export async function upsertPremiumMasterCourse(): Promise<void> {
     {
       title: "Master Program CBSE Class (7+8) 26-27",
       slug: MASTER_PROGRAM_SLUG,
-      marketingTitle: "Master Course",
+      marketingTitle: "Exclusive Master Course",
       description:
         "Premium full-year CBSE-aligned program — live classes, doubt support, and structured progress.",
       detailDescription: buildDetailDescription(
@@ -48,7 +48,7 @@ export async function upsertPremiumMasterCourse(): Promise<void> {
       classStartsAt: startsAt,
       purchaseFlow: {
         enabled: true,
-        bannerEyebrow: "Join Master Course",
+        bannerEyebrow: "Join Exclusive Master Course",
         bannerSubtitle: "Elevate Your Learning with Our Premium Program",
         previewCardProgramLine: "MASTER PROGRAM",
         previewCardBadge: "SCHOOL CURRICULUM",
@@ -148,7 +148,7 @@ export async function upsertPremiumMasterCourse(): Promise<void> {
   await upsertPremiumMasterLearningArtifacts(doc._id);
 }
 
-/** Teachers, FAQs, study outline, and program-scoped tests for the master course. */
+/** Teachers, FAQs, study outline, and program-scoped tests for the Exclusive Master Course. */
 async function upsertPremiumMasterLearningArtifacts(courseId: mongoose.Types.ObjectId) {
   const tMath = await Teacher.findOneAndUpdate(
     { name: "Shubham Rai" },
