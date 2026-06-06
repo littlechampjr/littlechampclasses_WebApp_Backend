@@ -2,6 +2,8 @@ import { Router } from "express";
 import { z } from "zod";
 import { Course } from "../models/Course.js";
 import { InterestedUser } from "../models/InterestedUser.js";
+import { User } from "../models/User.js";
+import { requireAuth } from "../middleware/auth.js";
 import { createOtpChallenge, verifyOtpChallenge } from "../services/otpChallengeService.js";
 import { getSmsSender } from "../services/sms/getSmsSender.js";
 import { asyncHandler } from "../util/asyncHandler.js";
@@ -28,6 +30,10 @@ const confirmSchema = z.object({
   phone: z.string().min(8).max(20),
   courseSlug: z.string().min(1).max(200),
   code: z.string().min(4).max(8),
+});
+
+const confirmAsUserSchema = z.object({
+  courseSlug: z.string().min(1).max(200),
 });
 
 export const interestRouter = Router();
@@ -111,6 +117,81 @@ interestRouter.post(
       return;
     }
 
+    const course = await Course.findOne({ slug, isActive: true }).lean();
+    if (!course) {
+      res.status(404).json({ error: "Course not found." });
+      return;
+    }
+    if (course.bookDemoEnabled === true) {
+      res.status(400).json({ error: "This program is now open for booking — use Book Demo to enroll." });
+      return;
+    }
+
+    const ip = clientIp(req);
+
+    try {
+      await InterestedUser.create({
+        phone: phone.national10,
+        course: course._id,
+        courseSlug: slug,
+        ip,
+      });
+    } catch (e: unknown) {
+      if (
+        e &&
+        typeof e === "object" &&
+        "code" in e &&
+        (e as { code?: number }).code === 11000
+      ) {
+        res.status(200).json({
+          ok: true,
+          message: "We already have your number for this program. We’ll be in touch.",
+        });
+        return;
+      }
+      throw e;
+    }
+
+    res.status(201).json({
+      ok: true,
+      message: "You’re on the list. We’ll WhatsApp you when this program opens.",
+    });
+  }),
+);
+
+/**
+ * Logged-in waitlist join. Phone is taken from the authenticated User record —
+ * the JWT already proves the user owns that number, so no OTP needed.
+ */
+interestRouter.post(
+  "/confirm-as-user",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const parsed = confirmAsUserSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten().fieldErrors });
+      return;
+    }
+
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({ error: "Unauthorized." });
+      return;
+    }
+
+    const user = await User.findById(userId).lean();
+    if (!user || !user.phoneE164) {
+      res.status(401).json({ error: "Account not found. Please sign in again." });
+      return;
+    }
+
+    const phone = normalizeIndianMobile(user.phoneE164);
+    if (!phone.ok) {
+      res.status(400).json({ error: "Account phone is invalid." });
+      return;
+    }
+
+    const slug = parsed.data.courseSlug.trim().toLowerCase();
     const course = await Course.findOne({ slug, isActive: true }).lean();
     if (!course) {
       res.status(404).json({ error: "Course not found." });

@@ -10,6 +10,7 @@ import { coursesRouter } from "./routes/courses.js";
 import { interestRouter } from "./routes/interest.js";
 import { learnerMeRouter } from "./routes/learnerMe.js";
 import { razorpayWebhookHandler } from "./routes/razorpayWebhook.js";
+import { teachersRouter } from "./routes/teachers.js";
 import { usersRouter } from "./routes/users.js";
 import { testsRouter } from "./routes/tests.js";
 import { adminRouter } from "./routes/admin/index.js";
@@ -129,6 +130,7 @@ app.use("/api/bookings", bookingLimiter, bookingsRouter);
 app.use("/api/book-demo", otpLimiter, bookDemoRouter);
 app.use("/api/interest", interestLimiter, interestRouter);
 app.use("/api/tests", testsRouter);
+app.use("/api/teachers", teachersRouter);
 app.use("/api/admin", adminRouter);
 
 app.use((req, res) => {
