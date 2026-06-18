@@ -14,6 +14,8 @@ export const ADMIN_PERMISSIONS = {
   ASSIGNMENTS_WRITE: "assignments:write",
   UPLOADS_WRITE: "uploads:write",
   AUDIT_READ: "audit:read",
+  FEEDBACK_READ: "feedback:read",
+  FEEDBACK_WRITE: "feedback:write",
 } as const;
 
 export type AdminPermissionKey = (typeof ADMIN_PERMISSIONS)[keyof typeof ADMIN_PERMISSIONS];

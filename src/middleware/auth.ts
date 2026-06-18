@@ -23,3 +23,21 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
     res.status(401).json({ error: "Invalid or expired token" });
   }
 }
+
+/**
+ * Sets `req.userId` if a valid Bearer token is present, otherwise lets the request
+ * through unauthenticated. Used by endpoints (e.g. feedback) that accept both
+ * logged-in and anonymous submissions.
+ */
+export function attachOptionalUser(req: Request, _res: Response, next: NextFunction) {
+  const header = req.headers.authorization;
+  if (header?.startsWith("Bearer ")) {
+    try {
+      const decoded = jwt.verify(header.slice(7), env.jwtSecret) as JwtBody;
+      if (decoded.sub) req.userId = decoded.sub;
+    } catch {
+      // Ignore invalid token — request continues anonymously.
+    }
+  }
+  next();
+}
