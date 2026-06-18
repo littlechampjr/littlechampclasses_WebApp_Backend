@@ -7,6 +7,7 @@ import { authRouter } from "./routes/auth.js";
 import { bookDemoRouter } from "./routes/bookDemo.js";
 import { bookingsRouter } from "./routes/bookings.js";
 import { coursesRouter } from "./routes/courses.js";
+import { feedbackRouter } from "./routes/feedback.js";
 import { interestRouter } from "./routes/interest.js";
 import { learnerMeRouter } from "./routes/learnerMe.js";
 import { razorpayWebhookHandler } from "./routes/razorpayWebhook.js";
@@ -120,6 +121,13 @@ const interestLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+const feedbackLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+});
+
 app.use(globalLimiter);
 
 app.use("/api/auth", authRouter);
@@ -129,6 +137,7 @@ app.use("/api/courses", coursesRouter);
 app.use("/api/bookings", bookingLimiter, bookingsRouter);
 app.use("/api/book-demo", otpLimiter, bookDemoRouter);
 app.use("/api/interest", interestLimiter, interestRouter);
+app.use("/api/feedback", feedbackLimiter, feedbackRouter);
 app.use("/api/tests", testsRouter);
 app.use("/api/teachers", teachersRouter);
 app.use("/api/admin", adminRouter);

@@ -4,6 +4,7 @@ import { adminAuthRouter } from "./auth.js";
 import { adminCoursesRouter } from "./courses.js";
 import { adminDashboardRouter } from "./dashboard.js";
 import { adminFaqsRouter } from "./faqs.js";
+import { adminFeedbackRouter } from "./feedback.js";
 import {
   adminBatchRootRouter,
   adminScheduleRouter,
@@ -23,6 +24,7 @@ adminRouter.use("/", adminBatchRootRouter);
 adminRouter.use("/batches/:batchId/sessions", adminSessionsRouter);
 adminRouter.use("/teachers", adminTeachersRouter);
 adminRouter.use("/faqs", adminFaqsRouter);
+adminRouter.use("/feedback", adminFeedbackRouter);
 adminRouter.use("/tests", adminTestsRouter);
 adminRouter.use("/assignments", adminAssignmentsRouter);
 adminRouter.use("/uploads", adminUploadsRouter);
